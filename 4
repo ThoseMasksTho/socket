@@ -1,0 +1,57 @@
+// Установка адреса и порта сервера
+$serverAddress = 'localhost';
+$serverPort = 9000;
+
+// Создание сокета
+$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+socket_bind($socket, $serverAddress, $serverPort);
+socket_listen($socket);
+
+// Хранение активных подключений
+$connections = array($socket);
+
+// Бесконечный цикл для обработки клиентских запросов
+while (true) {
+    $changedSockets = $connections;
+    socket_select($changedSockets, $write = NULL, $except = NULL, NULL);
+
+    // Обработка новых подключений
+    if (in_array($socket, $changedSockets)) {
+        $newSocket = socket_accept($socket);
+        $connections[] = $newSocket;
+
+        // Отправка приветственного сообщения клиенту
+        $welcomeMessage = "Добро пожаловать в чат! Напишите 'exit' для выхода.";
+        socket_write($newSocket, $welcomeMessage, strlen($welcomeMessage));
+
+        // Удаление сокета сервера из измененных сокетов
+        $key = array_search($socket, $changedSockets);
+        unset($changedSockets[$key]);
+    }
+
+    // Обработка входящих сообщений от клиентов
+    foreach ($changedSockets as $changedSocket) {
+        // Чтение данных из сокета
+        $data = socket_read($changedSocket, 1024);
+
+        // Проверка наличия команды выхода
+        if (trim($data) == 'exit') {
+            // Закрытие соединения
+            $key = array_search($changedSocket, $connections);
+            socket_close($changedSocket);
+            unset($connections[$key]);
+            continue;
+        }
+
+        // Отправка сообщения клиентам
+        foreach ($connections as $clientSocket) {
+            // Исключение сокета сервера и отправителя
+            if ($clientSocket != $socket && $clientSocket != $changedSocket) {
+                socket_write($clientSocket, $data, strlen($data));
+            }
+        }
+    }
+}
+
+// Закрытие сокета сервера
+socket_close($socket);
